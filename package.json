@@ -1,6 +1,6 @@
 {
   "name": "node-iDR",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "routon iDR sdk for node addon",
   "main": "./lib/RoutonRead.js",
   "gypfile": true,
