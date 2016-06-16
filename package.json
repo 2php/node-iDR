@@ -1,14 +1,15 @@
 {
   "name": "node-iDR",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "routon iDR sdk for node addon",
   "main": "./lib/RoutonRead.js",
   "gypfile": true,
   "scripts":{
-     "build":"node-gyp build --arch=ia32",
-	 "copy": "cp build/Release/RoutonRead.node bin/RoutonRead.node",
-     "postinstall": "npm run build && npm run copy",
-	 "test":"node test.js"
+    "build": "node-gyp build --arch=ia32",
+    "copy": "copy build\\Release\\RoutonRead.node bin\\RoutonRead.node",
+    "install": "node-gyp rebuild",
+    "postinstall": "npm run build && npm run copy",
+    "test": "node test.js"
   },
   "dependencies": {
   }
