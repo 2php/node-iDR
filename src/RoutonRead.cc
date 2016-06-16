@@ -1,4 +1,4 @@
-#include "RoutonRead.h"
+﻿#include "RoutonRead.h"
 #include <iostream>
 #include <string>
 #include <stdio.h>
@@ -16,9 +16,9 @@ struct DelayBaton
 	Persistent<Function> cbRealDataCallback;      // javascript read callback
 	Persistent<Function> cbErrorCallback;      // javascript error callback
 
-	int isRead = 1;// 是否开始监听
-
-	int status = 1;// 状态1:正常，0：读取失败，-1：读取异常
+	int isRead = 1; // 是否开始监听
+  int cardType = 1; // 卡类型：身份证：1，IC卡：2
+	int status = 1; // 状态1:正常，0：读取失败，-1：读取异常
 
 	char* name = new char[31];//姓名
 	char* gender = new char[3];//性别
@@ -69,6 +69,7 @@ void RoutonRead::Init(Handle<Object> exports) {
 	NODE_SET_PROTOTYPE_METHOD(tpl, "CloseComm", DR_CloseComm);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "Authenticate", DR_Authenticate);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "ReadBaseInfos", DR_ReadBaseInfos);
+	NODE_SET_PROTOTYPE_METHOD(tpl, "ICReadCardSN", DR_IC_ReadCardSN);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "StartRealReadCard", DR_Start_RealReadCard);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "StopRealReadCard", DR_Stop_RealReadCard);
 	NODE_SET_PROTOTYPE_METHOD(tpl, "ShutDownAntenna", DR_Routon_ShutDownAntenna);
@@ -145,30 +146,61 @@ void RoutonRead::DR_ReadBaseInfos(const FunctionCallbackInfo<Value>& args) {
 	char* expireStart = new char[9];//有效期起始日期
 	char* expireEnd = new char[9];//有效期截至日期
 
-	int result = ReadBaseInfos(name, gender, folk, birthDay, code, address, agency, expireStart, expireEnd);
+	int result = Authenticate();
 	if (result)
 	{
-		Local<Object> readInfo = Object::New(isolate);
-		readInfo->Set(String::NewFromUtf8(isolate, "name"), String::NewFromUtf8(isolate, GBKToUTF8(name).c_str()));
-		readInfo->Set(String::NewFromUtf8(isolate, "gender"), String::NewFromUtf8(isolate, GBKToUTF8(gender).c_str()));
-		readInfo->Set(String::NewFromUtf8(isolate, "folk"), String::NewFromUtf8(isolate, GBKToUTF8(folk).c_str()));
-		readInfo->Set(String::NewFromUtf8(isolate, "birthDay"), String::NewFromUtf8(isolate, birthDay));
-		readInfo->Set(String::NewFromUtf8(isolate, "code"), String::NewFromUtf8(isolate, code));
-		readInfo->Set(String::NewFromUtf8(isolate, "address"), String::NewFromUtf8(isolate, GBKToUTF8(address).c_str()));
-		readInfo->Set(String::NewFromUtf8(isolate, "agency"), String::NewFromUtf8(isolate, GBKToUTF8(agency).c_str()));
-		readInfo->Set(String::NewFromUtf8(isolate, "expireStart"), String::NewFromUtf8(isolate, expireStart));
-		readInfo->Set(String::NewFromUtf8(isolate, "expireEnd"), String::NewFromUtf8(isolate, expireEnd));
+		result = ReadBaseInfos(name, gender, folk, birthDay, code, address, agency, expireStart, expireEnd);
+		if(result)
+		{
+			Local<Object> readInfo = Object::New(isolate);
+			readInfo->Set(String::NewFromUtf8(isolate, "name"), String::NewFromUtf8(isolate, GBKToUTF8(name).c_str()));
+			readInfo->Set(String::NewFromUtf8(isolate, "gender"), String::NewFromUtf8(isolate, GBKToUTF8(gender).c_str()));
+			readInfo->Set(String::NewFromUtf8(isolate, "folk"), String::NewFromUtf8(isolate, GBKToUTF8(folk).c_str()));
+			readInfo->Set(String::NewFromUtf8(isolate, "birthDay"), String::NewFromUtf8(isolate, birthDay));
+			readInfo->Set(String::NewFromUtf8(isolate, "code"), String::NewFromUtf8(isolate, code));
+			readInfo->Set(String::NewFromUtf8(isolate, "address"), String::NewFromUtf8(isolate, GBKToUTF8(address).c_str()));
+			readInfo->Set(String::NewFromUtf8(isolate, "agency"), String::NewFromUtf8(isolate, GBKToUTF8(agency).c_str()));
+			readInfo->Set(String::NewFromUtf8(isolate, "expireStart"), String::NewFromUtf8(isolate, expireStart));
+			readInfo->Set(String::NewFromUtf8(isolate, "expireEnd"), String::NewFromUtf8(isolate, expireEnd));
 
-		delete[]name;
-		delete[]gender;
-		delete[]folk;
-		delete[]birthDay;
-		delete[]code;
-		delete[]address;
-		delete[]agency;
-		delete[]expireStart;
-		delete[]expireEnd;
-		args.GetReturnValue().Set(readInfo);
+			delete[]name;
+			delete[]gender;
+			delete[]folk;
+			delete[]birthDay;
+			delete[]code;
+			delete[]address;
+			delete[]agency;
+			delete[]expireStart;
+			delete[]expireEnd;
+			args.GetReturnValue().Set(readInfo);
+		}
+		else{
+			args.GetReturnValue().Set(String::NewFromUtf8(isolate, 0));
+		}
+	}
+	else{
+		args.GetReturnValue().Set(String::NewFromUtf8(isolate, 0));
+	}
+}
+
+void RoutonRead::DR_IC_ReadCardSN(const FunctionCallbackInfo<Value>& args) {
+	Isolate* isolate = Isolate::GetCurrent();
+	HandleScope scope(isolate);
+
+	char* code = new char[16];//IC A卡卡号
+
+	int result = Routon_IC_FindCard();
+	if (result)
+	{
+		result = Routon_IC_HL_ReadCardSN(code);
+		if (result)
+		{
+			args.GetReturnValue().Set(String::NewFromUtf8(isolate, code));
+			delete[]code;
+		}
+		else{
+			args.GetReturnValue().Set(String::NewFromUtf8(isolate, 0));
+		}
 	}
 	else{
 		args.GetReturnValue().Set(String::NewFromUtf8(isolate, 0));
@@ -186,6 +218,25 @@ void Delay(uv_work_t *req)
 				int result = ReadBaseInfos(baton->name, baton->gender, baton->folk, baton->birthDay, baton->code, baton->address, baton->agency, baton->expireStart, baton->expireEnd);
 				if (result)
 				{
+					baton->cardType = 1;
+					baton->status = 1;
+					baton->async_request.data = baton;
+					uv_async_send(&baton->async_request);
+					Sleep(478);
+				}
+				else
+				{
+					baton->status = 0;
+					baton->async_request.data = baton;
+					uv_async_send(&baton->async_request);
+				}
+			}
+			else if(Routon_IC_FindCard()){
+				baton->code = new char[19];
+				int result = Routon_IC_HL_ReadCardSN(baton->code);
+				if (result)
+				{
+					baton->cardType = 2;
 					baton->status = 1;
 					baton->async_request.data = baton;
 					uv_async_send(&baton->async_request);
@@ -225,15 +276,22 @@ void DelayAsyncAfter(uv_async_t* req, int status)
 	if (baton->status)
 	{
 		Local<Object> readInfo = Object::New(isolate);
-		readInfo->Set(String::NewFromUtf8(isolate, "name"), String::NewFromUtf8(isolate, GBKToUTF8(baton->name).c_str()));
-		readInfo->Set(String::NewFromUtf8(isolate, "gender"), String::NewFromUtf8(isolate, GBKToUTF8(baton->gender).c_str()));
-		readInfo->Set(String::NewFromUtf8(isolate, "folk"), String::NewFromUtf8(isolate, GBKToUTF8(baton->folk).c_str()));
-		readInfo->Set(String::NewFromUtf8(isolate, "birthDay"), String::NewFromUtf8(isolate, baton->birthDay));
-		readInfo->Set(String::NewFromUtf8(isolate, "code"), String::NewFromUtf8(isolate, baton->code));
-		readInfo->Set(String::NewFromUtf8(isolate, "address"), String::NewFromUtf8(isolate, GBKToUTF8(baton->address).c_str()));
-		readInfo->Set(String::NewFromUtf8(isolate, "agency"), String::NewFromUtf8(isolate, GBKToUTF8(baton->agency).c_str()));
-		readInfo->Set(String::NewFromUtf8(isolate, "expireStart"), String::NewFromUtf8(isolate, baton->expireStart));
-		readInfo->Set(String::NewFromUtf8(isolate, "expireEnd"), String::NewFromUtf8(isolate, baton->expireEnd));
+		readInfo->Set(String::NewFromUtf8(isolate, "cardType"), Number::New(isolate, baton->cardType));
+
+		if(baton->cardType == 1){
+			readInfo->Set(String::NewFromUtf8(isolate, "name"), String::NewFromUtf8(isolate, GBKToUTF8(baton->name).c_str()));
+			readInfo->Set(String::NewFromUtf8(isolate, "gender"), String::NewFromUtf8(isolate, GBKToUTF8(baton->gender).c_str()));
+			readInfo->Set(String::NewFromUtf8(isolate, "folk"), String::NewFromUtf8(isolate, GBKToUTF8(baton->folk).c_str()));
+			readInfo->Set(String::NewFromUtf8(isolate, "birthDay"), String::NewFromUtf8(isolate, baton->birthDay));
+			readInfo->Set(String::NewFromUtf8(isolate, "code"), String::NewFromUtf8(isolate, baton->code));
+			readInfo->Set(String::NewFromUtf8(isolate, "address"), String::NewFromUtf8(isolate, GBKToUTF8(baton->address).c_str()));
+			readInfo->Set(String::NewFromUtf8(isolate, "agency"), String::NewFromUtf8(isolate, GBKToUTF8(baton->agency).c_str()));
+			readInfo->Set(String::NewFromUtf8(isolate, "expireStart"), String::NewFromUtf8(isolate, baton->expireStart));
+			readInfo->Set(String::NewFromUtf8(isolate, "expireEnd"), String::NewFromUtf8(isolate, baton->expireEnd));
+		}
+		else{
+			readInfo->Set(String::NewFromUtf8(isolate, "code"), String::NewFromUtf8(isolate, baton->code));
+		}
 
 		// 获取回调函数
 		Local<Function> cb = Local<Function>::New(isolate, baton->cbRealDataCallback);
@@ -247,18 +305,14 @@ void DelayAsyncAfter(uv_async_t* req, int status)
 	{
 		Local<Function> cb = Local<Function>::New(isolate, baton->cbErrorCallback);
 		const unsigned argc = 1;
-		Local<Value> argv[argc] = {
-			String::NewFromUtf8(isolate, "读取身份证信息失败")
-		};
+		Local<Value> argv[argc] = {String::NewFromUtf8(isolate, "Read the card information failure!")};
 		cb->Call(isolate->GetCurrentContext()->Global(), argc, argv);
 	}
 	else
 	{
 		Local<Function> cb = Local<Function>::New(isolate, baton->cbErrorCallback);
 		const unsigned argc = 1;
-		Local<Value> argv[argc] = {
-			String::NewFromUtf8(isolate, "读取身份证信息异常")
-		};
+		Local<Value> argv[argc] = {String::NewFromUtf8(isolate, "Read the card information exception!")};
 		cb->Call(isolate->GetCurrentContext()->Global(), argc, argv);
 	}
 }
@@ -273,6 +327,8 @@ void RoutonRead::DR_Start_RealReadCard(const FunctionCallbackInfo<Value>& args) 
 	int result = InitComm(iPort);
 	if (result)
 	{
+	  Routon_RepeatRead(false);
+
 		baton = new DelayBaton;
 		baton->request.data = baton;
 		baton->cbRealDataCallback.Reset(isolate, Persistent<Function>::Persistent(isolate, Local<Function>::Cast(args[1])));
